@@ -398,6 +398,7 @@ class MilvusVideoVectorRepository(IVideoVectorRepository):
 <img width="612" height="256" alt="image" src="https://github.com/user-attachments/assets/92aad832-d6cf-4c38-9c9f-97f922e116af" />
 
 **Проблема одной очереди**
+
 Использовать одну очередь для всех типов событий — плохое решение из-за невозможности нормально масштабироваться. Событие на просмотр прилетает в несколько раз чаще, чем на дизлайк или комментарий. 
 
 **Что с этим можно сделать:**
