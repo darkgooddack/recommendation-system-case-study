@@ -183,8 +183,90 @@ class VideoDescriptionPayload(BaseModel):
 
 ### Milvus
 
+Milvus — это высокопроизводительная векторная база данных с открытым исходным кодом, разработанная специально для обработки, хранения и поиска огромных массивов неструктурированных данных с использованием алгоритмов искусственного интеллекта.
 
+Модели AI преобразуют данные в числовые векторы. Milvus индексирует их и позволяет быстро находить наиболее похожие векторы среди миллиардов других. Это позволяет реализовывать RAG-системы, рекомендательные сервисы и системы распознавания лиц.
 
+**Протокол gRPC и асинхронность**
+Класс AsyncMilvusClient под капотом оптимизирован для работы через протокол gRPC. По сравнению с обычным HTTP-интерфейсом (порт 9091), gRPC обеспечивает:
+Меньшую задержку (Latency): Бинарный протокол HTTP/2 значительно быстрее передает тяжелые массивы данных (эмбеддинги).
+Меньший объем трафика: Векторы сериализуются в Protobuf, что гораздо компактнее текстового JSON.
+Полноценную поддержку асинхронности: gRPC нативно поддерживает мультиплексирование запросов в одном сетевом соединении.
+Подробнее об асинхронном режиме работы можно прочитать в [официальной документации Milvus по asyncio](https://milvus.io/docs/ru/use-async-milvus-client-with-asyncio.md).
+
+**Параметры инициализации AsyncMilvusClient**
+При создании экземпляра AsyncMilvusClient можно гибко настраивать параметры подключения и поведение пула gRPC-каналов:
+- **uri** (str) — адрес для подключения к серверу Milvus. Для локального Docker-контейнера обычно используется http://localhost:19530.
+- **token** (str) — строка авторизации в формате username:password (по дефолту "root:Milvus"). Если безопасность в кластере отключена MILVUS_COMMON_SECURITY_AUTHORIZATIONENABLED=false (по дефолту отключена), этот параметр можно опустить.
+- **db_name** (str) — имя конкретной базы данных внутри Milvus, с которой будет работать клиент (по умолчанию используется "default").
+- **timeout** (float) — максимальное время ожидания ответа от сервера (таймаут) для сетевых операций по умолчанию.
+- **pool_size** (int) — размер пула соединений. Определяет максимальное количество gRPC-каналов, которые клиент может держать открытыми для одновременной обработки конкурентных асинхронных запросов.
+
+**Управление базой: Milvus Attu**
+Для удобного администрирования базы данных на продакшене используется Milvus Attu — это официальный графический интерфейс (Web GUI), открывающийся в браузере. Он выполняет ту же роль, что и pgAdmin для PostgreSQL или Compass для MongoDB.
+
+Через Attu можно визуально управлять коллекциями, создавать индексы, контролировать объем загруженных векторов, настраивать права пользователей и выполнять тестовые поисковые запросы прямо из браузера.
+
+Инструкция по развертыванию и работе с интерфейсом доступна в [руководстве по быстрому старту с Attu](https://milvus.io/docs/ru/quickstart_with_attu.md).
+
+```python
+class MilvusConnectionManager:
+    def __init__(self):
+        self.client: AsyncMilvusClient | None = None
+        self._collections = ["item_semantic", "item_behavioral"]
+
+    async def connect(self) -> None:
+        if self.client is None:
+            self.client = AsyncMilvusClient(
+                uri=settings.MILVUS_URL,
+                token=settings.MILVUS_TOKEN,
+                pool_size=settings.MILVUS_POOL_SIZE,
+            )
+            logger.info("AsyncMilvusClient connection pool initialized.")
+        await self._init_collections()
+
+    async def disconnect(self) -> None:
+        if self.client is not None:
+            await self.client.close()
+            self.client = None
+            logger.info("AsyncMilvusClient connection pool closed.")
+
+    async def _init_collections(self) -> None:
+        for col_name in self._collections:
+            await self._create_collection_if_not_exists(col_name)
+
+    async def _create_collection_if_not_exists(self, name: str) -> None:
+        if await self.client.has_collection(collection_name=name):
+            logger.info(f"Milvus collection '{name}' already exists.")
+            return
+
+        index_params = self.client.prepare_index_params()
+        index_params.add_index(
+            field_name="vector",
+            metric_type="COSINE",
+            index_type="HNSW",
+            params={"M": 8, "efConstruction": 64},
+        )
+
+        await self.client.create_collection(
+            collection_name=name,
+            dimension=settings.VECTOR_DIM,
+            primary_field_name="video_id",
+            id_type="string",
+            max_length=64,
+            index_params=index_params,
+        )
+        logger.info(f"Milvus collection '{name}' initialized successfully.")
+
+milvus_manager = MilvusConnectionManager()
+```
+
+```python
+def get_milvus_client() -> AsyncMilvusClient:
+    if milvus_manager.client is None:
+        raise RuntimeError("Milvus connection manager is not initialized.")
+    return milvus_manager.client
+```
 
 ### Поиск похожих видео
 
@@ -207,7 +289,7 @@ class IVideoVectorRepository(ABC):
         self, 
         vector: list[float], 
         limit: int
-    ) -> List[ScoredVideoSearchResult]:
+    ) -> list[ScoredVideoSearchResult]:
         pass
 ```
 
@@ -248,13 +330,12 @@ class SemanticService:
 **Репозиторий для работы с данными Milvus.**
 ```python
 class MilvusVideoVectorRepository(IVideoVectorRepository):
-    def __init__(self, host: str, port: int, collection_name: str):
+    def __init__(self, client: AsyncMilvusClient, collection_name: str):
         self._collection_name = collection_name
-        self._client = MilvusClient(uri=f"http://{host}:{port}")
+        self._client = client
 
     async def get_vector_by_id(self, video_id: str) -> Optional[List[float]]:
-        res = await asyncio.to_thread(
-            self._client.get,
+        res = await self._client.get(
             collection_name=self._collection_name,
             ids=[video_id],
             output_fields=["vector"]
@@ -271,15 +352,13 @@ class MilvusVideoVectorRepository(IVideoVectorRepository):
         limit: int,
     ) -> List[ScoredVideoSearchResult]:
 
-        res = await asyncio.to_thread(
-            self._client.search,
+        res = await self._client.search(
             collection_name=self._collection_name,
             data=[vector],
             limit=limit,
             output_fields=["video_id"],
             search_params={
                 "metric_type": "COSINE",
-                "params": {"nprobe": 10}
             }
         )
 
@@ -301,6 +380,9 @@ class MilvusVideoVectorRepository(IVideoVectorRepository):
                 })
 
         return search_results
+
+    async def close(self):
+        await self._client.close()
 ```
 
 ## 4. Персональные рекомендации
