@@ -158,7 +158,33 @@ service = EmbeddingService(
 > Выбранная модель жестко задает длину массива. Для `MiniLM-L12-v2` это 384. Точно такую же размерность необходимо указать при создании коллекции в векторной базе данных, иначе при попытке сохранить эмбеддинги БД вернет ошибку несовместимости.
 
 ### Как видео попадают в ML сервис
+
+Рекомендации строятся в отдельном сервисе, это позволяет разделить нагрузку.
+
+<img width="606" height="256" alt="image" src="https://github.com/user-attachments/assets/f73baf29-3c68-4e14-be68-d5c1d83e0c76" />
+
+```python
+class VideoDescriptionPayload(BaseModel):
+    video_id: UUID
+    description: str
+    title: str = Field(max_length=255)
+    tags: List[str] = Field(default_factory=list)
+
+    def to_raw_text(self) -> str:
+        components = [
+            f"Название: {self.title.strip()}",
+            f"Описание: {self.description.strip()}",
+            f"Теги: {', '.join(t.strip() for t in self.tags if t.strip())}",
+        ]
+
+        return "\n".join(block for block in components if not block.endswith(": "))
+```
+
 ### Milvus
+
+
+
+
 ### Поиск похожих видео
 
 ## 4. Персональные рекомендации
