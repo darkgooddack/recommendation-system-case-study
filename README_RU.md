@@ -111,35 +111,36 @@ $$
 
 
 ```python
-from typing import Sequence
-
-
 class EmbeddingService:
-    def __init__(self, vector_store, encoder):
-        self.vector_store = vector_store
-        self.encoder = encoder
+    def __init__(self, encoder: SentenceTransformer):
+        self._encoder = encoder
 
-    def embed_batch(self, texts: Sequence[str]) -> list[list[float]]:
+    async def embed_batch(self, texts: Sequence[str]) -> list[list[float]]:
         if not texts:
             return []
 
-        vectors = self.encoder.encode(
+        vectors = await asyncio.to_thread(
+            self._encoder.encode,
             texts,
+            normalize_embeddings=True,
             convert_to_numpy=True,
-            show_progress_bar=False
+            show_progress_bar=False,
         )
 
         return vectors.tolist()
 ```
 
 ```python
-encoder = SentenceTransformer(settings.MODEL_NAME, device=device)
-vector_store = MilvusRepo()
+@lru_cache
+def get_sentence_transformer() -> SentenceTransformer:
+    return SentenceTransformer(
+        model_name_or_path=settings.MODEL_NAME,
+        device=settings.DEVICE,
+    )
 
-service = EmbeddingService(
-    vector_store=vector_store,
-    encoder=encoder
-)
+def get_embedding_service() -> EmbeddingService:
+    encoder = get_sentence_transformer()
+    return EmbeddingService(encoder=encoder)
 ```
 
 В основе сервиса EmbeddingService лежит библиотека `sentence-transformers` (PyTorch и Hugging Face) стандарт для генерации семантических эмбеддингов текстов.
@@ -186,6 +187,121 @@ class VideoDescriptionPayload(BaseModel):
 
 
 ### Поиск похожих видео
+
+**DTO ответа эндпоинта для передачи результатов поиска с весами релевантности.**
+```python
+class ScoredVideoSearchResult(TypedDict):
+    video_id: str
+    score: float
+```
+
+**Интерфейс работы с векторным хранилищем.**
+```python
+class IVideoVectorRepository(ABC):
+    @abstractmethod
+    async def get_vector_by_id(self, video_id: str) -> Optional[list[float]]:
+        pass
+
+    @abstractmethod
+    async def search_similar_by_vector(
+        self, 
+        vector: list[float], 
+        limit: int
+    ) -> List[ScoredVideoSearchResult]:
+        pass
+```
+
+**Сервисный слой для семантического поиска.**
+```python
+class SemanticService:
+    def __init__(self, vector_repo: IVideoVectorRepository):
+        self._vector_repo = vector_repo
+
+    async def get_similar_videos(
+        self,
+        video_id: str,
+        limit: int = 10,
+        min_score: float = 0.75,
+    ) -> List[ScoredVideoSearchResult]:
+
+        vector = await self._vector_repo.get_vector_by_id(video_id)
+        if vector is None:
+            return []
+
+        raw_results = await self._vector_repo.search_similar_by_vector(
+            vector=vector,
+            limit=limit + 1,
+        )
+
+        filtered_results = [
+            item
+            for item in raw_results
+            if (
+                str(item["video_id"]) != str(video_id)
+                and item["score"] >= min_score
+            )
+        ]
+
+        return filtered_results[:limit]
+```
+
+**Репозиторий для работы с данными Milvus.**
+```python
+class MilvusVideoVectorRepository(IVideoVectorRepository):
+    def __init__(self, host: str, port: int, collection_name: str):
+        self._collection_name = collection_name
+        self._client = MilvusClient(uri=f"http://{host}:{port}")
+
+    async def get_vector_by_id(self, video_id: str) -> Optional[List[float]]:
+        res = await asyncio.to_thread(
+            self._client.get,
+            collection_name=self._collection_name,
+            ids=[video_id],
+            output_fields=["vector"]
+        )
+
+        if not res or not isinstance(res, list):
+            return None
+            
+        return res[0].get("vector")
+
+    async def search_similar_by_vector(
+        self,
+        vector: List[float],
+        limit: int,
+    ) -> List[ScoredVideoSearchResult]:
+
+        res = await asyncio.to_thread(
+            self._client.search,
+            collection_name=self._collection_name,
+            data=[vector],
+            limit=limit,
+            output_fields=["video_id"],
+            search_params={
+                "metric_type": "COSINE",
+                "params": {"nprobe": 10}
+            }
+        )
+
+        if not res or not res[0]:
+            return []
+
+        search_results: List[ScoredVideoSearchResult] = []
+
+        for hit in res[0]:
+            entity = hit.get("entity", {}) if isinstance(hit, dict) else getattr(hit, "entity", {})
+            
+            v_id = entity.get("video_id") if isinstance(entity, dict) else getattr(entity, "video_id", None)
+            score = hit.get("distance") if isinstance(hit, dict) else getattr(hit, "distance", 0.0)
+
+            if v_id is not None:
+                search_results.append({
+                    "video_id": str(v_id),
+                    "score": float(score),
+                })
+
+        return search_results
+```
 
 ## 4. Персональные рекомендации
 ### Сигналы пользователей
