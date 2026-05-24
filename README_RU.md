@@ -460,8 +460,8 @@ ALS  — это алгоритм матричного разложения, ко
 - `likes_count`
 - `dislikes_count`
 - `comments_count`
-- first_interaction_at
-- last_interaction_at
+- `first_interaction_at`
+- `last_interaction_at`
 
 Если веса изменятся их можно будет легко пересчитать. 
 
