@@ -66,7 +66,7 @@ This enables the system to discover similar content even when there are no ident
 - Handles synonyms and alternative phrasing much better
 - Delivers more relevant recommendations
   
-### Вектора и эмбеддинги
+### Vectors and Embeddings
 
 An embedding is a numerical representation of an object (text, image, video) that encodes its meaning as a multidimensional vector: `"sad movie about space" → [0.12, -0.44, 0.88, ...]`. In this form, data can be compared with one another, and similar objects can be identified.
 
@@ -201,7 +201,7 @@ When creating an instance of AsyncMilvusClient, you can flexibly configure conne
 - **timeout** (float) — The maximum wait time for a server response (timeout) for default network operations.
 - **pool_size** (int) — The size of the connection pool. It specifies the maximum number of gRPC channels the client can keep open to concurrently handle competing asynchronous requests.
   
-**Управление базой: Milvus Attu**
+**Database Management: Milvus Attu**
 
 For convenient database administration in a production environment, Milvus Attu is used—an official graphical user interface that runs directly in a web browser. It serves the same role as pgAdmin does for PostgreSQL or Compass for MongoDB.
 
