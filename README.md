@@ -70,7 +70,7 @@ This enables the system to discover similar content even when there are no ident
 
 An embedding is a numerical representation of an object (text, image, video) that encodes its meaning as a multidimensional vector: `"sad movie about space" → [0.12, -0.44, 0.88, ...]`. In this form, data can be compared with one another, and similar objects can be identified.
 
-<img width="1230" height="677" alt="image" src="https://github.com/user-attachments/assets/cc5160e5-54ad-41d5-a548-309746a4f95d" />
+<img width="949" height="525" alt="image" src="https://github.com/user-attachments/assets/1d0408c3-6e99-476a-ab29-de749bd0ffd5" />
 
 Vectors can be compared, and their level of similarity determined, in various ways.
 
@@ -156,7 +156,7 @@ All pre-trained models are automatically downloaded from the **Hugging Face** re
 
 Recommendations are generated in a separate service, which allows for load distribution.
 
-<img width="606" height="256" alt="image" src="https://github.com/user-attachments/assets/f73baf29-3c68-4e14-be68-d5c1d83e0c76" />
+<img width="728" height="273" alt="image" src="https://github.com/user-attachments/assets/831e4a3e-abd4-4a04-be31-a44093720064" />
 
 ```python
 class VideoDescriptionPayload(BaseModel):
@@ -167,9 +167,9 @@ class VideoDescriptionPayload(BaseModel):
 
     def to_raw_text(self) -> str:
         components = [
-            f"Название: {self.title.strip()}",
-            f"Описание: {self.description.strip()}",
-            f"Теги: {', '.join(t.strip() for t in self.tags if t.strip())}",
+            f"Name: {self.title.strip()}",
+            f"Description: {self.description.strip()}",
+            f"Tags: {', '.join(t.strip() for t in self.tags if t.strip())}",
         ]
 
         return "\n".join(block for block in components if not block.endswith(": "))
@@ -395,7 +395,7 @@ A view serves as a foundational signal, recording the fact that a user has acces
 
 ### User Event Processing Pipeline
 
-<img width="612" height="256" alt="image" src="https://github.com/user-attachments/assets/92aad832-d6cf-4c38-9c9f-97f922e116af" />
+<img width="694" height="302" alt="image" src="https://github.com/user-attachments/assets/13e890d1-6e38-4350-9242-02547da7d050" />
 
 ****The Single-Queue Problem**
 
