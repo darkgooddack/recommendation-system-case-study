@@ -19,7 +19,7 @@ I was responsible for designing and implementing user event processing, semantic
 The repository will be of interest to ML, AI, and Python engineers, as well as those working with recommendation systems, search, and high-load services.
 
 This repository will be available in several versions:
-- Russian 
+- [Russian](https://github.com/darkgooddack/recommendation-system-case-study/blob/main/README_RU.md) 
 - English
 - Spanish
 
