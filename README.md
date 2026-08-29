@@ -21,7 +21,6 @@ The repository will be of interest to ML, AI, and Python engineers, as well as t
 This repository will be available in several versions:
 - [Russian](https://github.com/darkgooddack/recommendation-system-case-study/blob/main/README_RU.md) 
 - English
-- Spanish
 
 This is done to ensure the material is accessible to both Russian-speaking and international audiences working with ML, recommendation systems, and backend architecture.
 
